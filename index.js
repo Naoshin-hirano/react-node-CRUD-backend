@@ -10,6 +10,8 @@ const session = require('express-session');
 const bcrypt = require("bcrypt");
 const saltRounds = 10;
 
+const jwt = require('jsonwebtoken');
+
 const app = express();
 
 // データベース接続情報
@@ -82,6 +84,31 @@ app.post("/api/register", (req, res) => {
     })
 });
 
+// jwtミドルウェア
+const veryfyJWT = (req, res, next) => {
+    // api/isUserAuth リクエストのheaders[x-access-token]にtokenが保存されているか
+    const token = req.headers["x-access-token"]
+
+    if(!token){
+        res.send("トークンが必要ですので付与してください");
+    } else {
+        // tokenをシークレットキー(jwtSecret)で文字列に復号
+        jwt.verify(token, "jwtSecret", (err, decoded) => {
+            if(err){
+                res.json({auth: false, message: "認証に失敗しました"});
+            } else {
+                req.userId = decoded.id;
+                next();
+            }
+        });
+    }
+};
+
+// Userが認証されているかの確認
+app.get("/api/isUserAuth", veryfyJWT, (req, res) => {
+    res.send("あなたは認証されてます");
+});
+
 app.post("/api/login", (req, res) => {
     const username = req.body.username;
     const password = req.body.password;
@@ -98,16 +125,24 @@ app.post("/api/login", (req, res) => {
 
             bcrypt.compare(password, hash , (err, isEqual) => {
                 if(isEqual){
+                    const id = result[0].id
+                    // jwt: token発行
+                    // 第2引数: 秘密鍵 → tokenをjsonに復号するため
+                    // 第３引数: オブション
+                    const token = jwt.sign({id}, "jwtSecret", {
+                        expiresIn: 300
+                    });
                     // サーバーのuser情報をreq.session(cookie)へ送信する
                     // フロント側のcookie内とサーバー側のsession内に同じuser情報が存在する状態になる
                     req.session.user = result;
-                    res.send(result);
+                    // json形式にしてフロントへ送信
+                    res.json({auth: true, token: token, result: result});
                 } else {
-                    res.send({ message: "usernameかpasswordが間違っています"});
+                    res.json({auth: false, message: "usernameかpasswordが間違っています"});
                 }
             })
         } else {
-            res.send({ message: "入力したusernameが存在しません"});
+            res.json({ auth: false, message: "ユーザーが存在しません" });
         }
         
     });

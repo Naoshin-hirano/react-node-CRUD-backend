@@ -3,6 +3,10 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const mysql = require('mysql');
 
+const cookieParser = require('cookie-parser');
+// サイトにアクセスするとサーバー側でuser情報を記憶する
+const session = require('express-session');
+
 const bcrypt = require("bcrypt");
 const saltRounds = 10;
 
@@ -17,7 +21,28 @@ const db = mysql.createPool({
   });
 // 「Cross-origin resource sharing」の略.
 // clientとserverで異なるorigin（URLのProtocol、Host、Port Numberの3つを合わせたもの）を共有すること
-app.use(cors());
+// オブジェクトはsessionとcookie使うのに必要な情報
+app.use(cors({
+    origin: ["http://localhost:3000"],
+    methods: ["GET", "POST"],
+    credentials: true
+}));
+app.use(cookieParser());
+// req.session = cockieのこと
+app.use(session({
+    // cookie内のssession.idのkeyの呼び名
+    key: "userId",
+    // 指定した文字列を使ってクッキーIDを暗号化しクッキーIDが書き換えらているかを判断
+    secret: "subscribe",
+    // セッションにアクセスすると上書きされる
+    resave: false,
+    // 未初期化状態のセッションも保存するようなオプション
+    saveUninitialized: false,
+    // cookieの有効期限が24h
+    cookie: {
+        expires: 60 * 60 * 24,
+    }
+}));
 // クライアントから送信されたデータを、 req.body 経由で会得、操作できる。Body-Parser を基にExpressに組み込まれた機能、
 app.use(express.json());
 // Content-Type が application/x-www-form-urlencoded である POST リクエストのボディ部を解析し、 リクエストオブジェクトの body プロパティにフォームデータの内容を表すオブジェクトをセット
@@ -73,6 +98,9 @@ app.post("/api/login", (req, res) => {
 
             bcrypt.compare(password, hash , (err, isEqual) => {
                 if(isEqual){
+                    // サーバーのuser情報をreq.session(cookie)へ送信する
+                    // フロント側のcookie内とサーバー側のsession内に同じuser情報が存在する状態になる
+                    req.session.user = result;
                     res.send(result);
                 } else {
                     res.send({ message: "usernameかpasswordが間違っています"});
@@ -83,6 +111,15 @@ app.post("/api/login", (req, res) => {
         }
         
     });
+});
+
+app.get("/api/login", (req, res) => {
+    // req.session(cookie)にuser情報があれば、「ログイン中=true」のステータスとcookie内にあるユーザー情報をフロントへ返す
+    if(req.session.user){
+        res.send({ loggedIn: true, user: req.session.user });
+    } else {
+        res.send({ loggedIn: false});
+    }
 });
 
 app.put("/api/update", (req, res) => {

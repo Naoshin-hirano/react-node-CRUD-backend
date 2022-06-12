@@ -2,6 +2,10 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
 const mysql = require('mysql');
+
+const bcrypt = require("bcrypt");
+const saltRounds = 10;
+
 const app = express();
 
 // データベース接続情報
@@ -41,27 +45,41 @@ app.post("/api/insert", (req, res) => {
 app.post("/api/register", (req, res) => {
     const username = req.body.username;
     const password = req.body.password;
-
-    const sqlRegister = "INSERT INTO users (username, password) VALUES (?, ?)";
-    db.query(sqlRegister, [username, password], (err, result) => {
-        if(err) console.log(err);
-    });
+    // passwordをhash化してDBへ挿入
+    bcrypt.hash(password, saltRounds, (err, hash) => {
+        if (err) {
+            console.log(err)
+        }
+        const sqlRegister = "INSERT INTO users (username, password) VALUES (?, ?)";
+        db.query(sqlRegister, [username, hash], (err, result) => {
+            if(err) console.log(err);
+        });
+    })
 });
 
 app.post("/api/login", (req, res) => {
     const username = req.body.username;
     const password = req.body.password;
 
-    const sqlLogin = "SELECT * FROM users WHERE username = ? AND password = ?";
-    db.query(sqlLogin, [username, password], (err, result) => {
+    // ここでpassword = ? にすると、hash化されてないpasswordとhash化済みのpassword比べるのでエラーになる
+    const sqlLogin = "SELECT * FROM users WHERE username = ?";
+    db.query(sqlLogin, [username], (err, result) => {
         if(err){
             res.send({ err: err });
         }
         // resultは配列で返ってくるのでlengthが必要
         if(result.length > 0){
-            res.send(result);
+            const hash = result[0].password;
+
+            bcrypt.compare(password, hash , (err, isEqual) => {
+                if(isEqual){
+                    res.send(result);
+                } else {
+                    res.send({ message: "usernameかpasswordが間違っています"});
+                }
+            })
         } else {
-            res.send({ message: "usernameかpasswordが間違っています"});
+            res.send({ message: "入力したusernameが存在しません"});
         }
         
     });

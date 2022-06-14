@@ -26,7 +26,7 @@ const db = mysql.createPool({
 // オブジェクトはsessionとcookie使うのに必要な情報
 app.use(cors({
     origin: ["http://localhost:3000"],
-    methods: ["GET", "POST"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
 }));
 app.use(cookieParser());
@@ -90,7 +90,7 @@ const veryfyJWT = (req, res, next) => {
     const token = req.headers["x-access-token"]
 
     if(!token){
-        res.send("トークンが必要ですので付与してください");
+        res.json({auth: false, message: "トークンを付与してください"});
     } else {
         // tokenをシークレットキー(jwtSecret)で文字列に復号
         jwt.verify(token, "jwtSecret", (err, decoded) => {
@@ -106,7 +106,7 @@ const veryfyJWT = (req, res, next) => {
 
 // Userが認証されているかの確認
 app.get("/api/isUserAuth", veryfyJWT, (req, res) => {
-    res.send("あなたは認証されてます");
+    res.json({auth: true, message: "あなたは認証されています"});
 });
 
 app.post("/api/login", (req, res) => {
